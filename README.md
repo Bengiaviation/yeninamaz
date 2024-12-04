@@ -1,0 +1,2 @@
+# yeninamaz
+Namaz vakitlerinin gösterilmesi
