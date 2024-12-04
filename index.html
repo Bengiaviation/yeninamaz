@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Namaz Vakti</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-image: url('https://www.kurdenanatolien.com/wp-content/uploads/2024/08/AdobeStock_87517185.jpeg'); /* Buraya resim URL'sini koyun */
+            background-size: cover; /* Resmi ekrana sığdır */
+            background-position: center; /* Ortala */
+            background-repeat: no-repeat; /* Resmi tekrarlama */
+        }
+        button {
+            padding: 20px 40px;
+            font-size: 24px;
+            background-color: rgba(0, 123, 255, 0.8);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: rgba(0, 86, 179, 0.8);
+        }
+        .current-time {
+            margin-top: 10px;
+            font-size: 24px;
+            color: #ffffff;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8); /* Yazı için gölge */
+        }
+        .prayer-time {
+            margin-top: 10px;
+            font-size: 24px;
+            color: #f0f0f0;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8); /* Yazı için gölge */
+        }
+        .next-prayer {
+            margin-top: 20px;
+            font-size: 48px;
+            font-weight: bold;
+            color: #4caf50;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+        }
+        .remaining-time {
+            font-size: 48px;
+            font-weight: bold;
+            margin-top: 20px;
+            color: #ff5722;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+        }
+    </style>
+</head>
+<body>
+    <div class="current-time" id="currentTime">Şu an saat: --:--</div>
+    <div class="prayer-time" id="prayerTime">Namaz vakti: --:--</div>
+    <div class="next-prayer" id="nextPrayer">Akşam namazına</div>
+    <div class="remaining-time" id="remainingTime">1 saat 40 dakika kaldı</div>
+    <button id="prayerButton">Bir Sonraki Namaz Vaktini Söyle</button>
+
+    <script>
+        let prayerTimes = {};
+
+        const prayerNames = {
+            "Fajr": "İmsak",
+            "Sunrise": "Güneş",
+            "Dhuhr": "Öğle",
+            "Asr": "İkindi",
+            "Maghrib": "Akşam",
+            "Isha": "Yatsı"
+        };
+
+        function timeToMinutes(timeStr) {
+            const [hour, minute] = timeStr.split(':').map(Number);
+            return hour * 60 + minute;
+        }
+
+        function minutesToHours(minutes) {
+            const hours = Math.floor(minutes / 60);
+            const remainingMinutes = minutes % 60;
+            return { hours, remainingMinutes };
+        }
+
+        async function fetchPrayerTimes() {
+            try {
+                const response = await fetch("https://api.aladhan.com/v1/timingsByCity?city=Kapakli&country=Turkey&method=13");
+                const data = await response.json();
+                return {
+                    "İmsak": data.data.timings.Fajr,
+                    "Güneş": data.data.timings.Sunrise,
+                    "Öğle": data.data.timings.Dhuhr,
+                    "İkindi": data.data.timings.Asr,
+                    "Akşam": data.data.timings.Maghrib,
+                    "Yatsı": data.data.timings.Isha
+                };
+            } catch (error) {
+                console.error("Namaz vakitleri alınamadı:", error);
+                return null;
+            }
+        }
+
+        async function getCurrentTime() {
+            try {
+                const response = await fetch("http://worldtimeapi.org/api/timezone/Europe/Istanbul");
+                const data = await response.json();
+                const now = new Date(data.datetime);
+                return now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', hour12: false });
+            } catch (error) {
+                console.error("Saat alınamadı:", error);
+                const now = new Date();
+                return now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', hour12: false });
+            }
+        }
+
+        function findNextPrayer(currentTime, timings) {
+            const nowInMinutes = timeToMinutes(currentTime);
+            const prayerTimes = Object.entries(timings);
+            for (const [name, time] of prayerTimes) {
+                const prayerInMinutes = timeToMinutes(time);
+                if (nowInMinutes < prayerInMinutes) {
+                    const remainingMinutes = prayerInMinutes - nowInMinutes;
+                    return { name, remaining: remainingMinutes, time };
+                }
+            }
+
+            const tomorrowFajrMinutes = timeToMinutes(timings["İmsak"]) + 24 * 60;
+            const remainingMinutes = tomorrowFajrMinutes - nowInMinutes;
+            return { name: "İmsak (Yarın)", remaining: remainingMinutes, time: timings["İmsak"] };
+        }
+
+        async function updateDisplay() {
+            const currentTimeDiv = document.getElementById("currentTime");
+            const prayerTimeDiv = document.getElementById("prayerTime");
+            const nextPrayerDiv = document.getElementById("nextPrayer");
+            const remainingTimeDiv = document.getElementById("remainingTime");
+
+            const currentTime = await getCurrentTime();
+            prayerTimes = await fetchPrayerTimes();
+
+            if (prayerTimes) {
+                const nextPrayer = findNextPrayer(currentTime, prayerTimes);
+
+                if (nextPrayer) {
+                    const { hours, remainingMinutes } = minutesToHours(nextPrayer.remaining);
+                    const prayerName = prayerNames[nextPrayer.name] || nextPrayer.name;
+
+                    currentTimeDiv.textContent = `Şu an saat: ${currentTime}`;
+                    prayerTimeDiv.textContent = `Namaz vakti: ${nextPrayer.time}`;
+                    nextPrayerDiv.textContent = `${prayerName} namazına`;
+                    remainingTimeDiv.textContent = `${hours} saat ${remainingMinutes} dakika kaldı`;
+                }
+            } else {
+                currentTimeDiv.textContent = "Saat alınamadı.";
+                prayerTimeDiv.textContent = "Namaz vakitleri alınamadı.";
+                nextPrayerDiv.textContent = "Bir sonraki namaz bulunamadı.";
+                remainingTimeDiv.textContent = "";
+            }
+        }
+
+        async function handlePrayerTime() {
+            const currentTime = await getCurrentTime();
+            const nextPrayer = findNextPrayer(currentTime, prayerTimes);
+
+            if (nextPrayer) {
+                const { hours, remainingMinutes } = minutesToHours(nextPrayer.remaining);
+                const prayerName = prayerNames[nextPrayer.name] || nextPrayer.name;
+                const message = `${prayerName} namazına ${hours} saat ${remainingMinutes} dakika kaldı.`;
+
+                const utterance = new SpeechSynthesisUtterance(message);
+                utterance.lang = 'tr-TR';
+                speechSynthesis.speak(utterance);
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", updateDisplay);
+        document.getElementById("prayerButton").addEventListener("click", handlePrayerTime);
+    </script>
+</body>
+</html>
